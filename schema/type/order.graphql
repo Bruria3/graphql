@@ -1,0 +1,19 @@
+type Order {
+    id: ID!
+    name: String
+    createdAt: String
+    status: String
+    quantity: Int!
+}
+
+input OrderInput {
+    name: String
+    createdAt: String
+    status: String
+    quantity: Int
+}
+
+input OrderUpdateInput {
+    id: String!
+    quantity: Int
+}
