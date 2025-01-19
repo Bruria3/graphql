@@ -68,9 +68,6 @@ func (h *GraphQL) serveDefault(w http.ResponseWriter, r *http.Request, params *p
 
 func (h *GraphQL) serveSubscription(w http.ResponseWriter, r *http.Request, params *params) {
 	ctx, cancel := context.WithTimeout(r.Context(), subscriptionTimeout)
-
-	// TODO: use context instead, as CloseNotifier is deprecated
-	// However, for some reason, context doesn't seem to get cancelled when client aborts request
 	callOnClose(w, cancel)
 
 	flusher, ok := w.(http.Flusher)

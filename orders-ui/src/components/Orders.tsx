@@ -6,9 +6,9 @@ import { Grid2 } from "@mui/material";
 import { GET_ORDERS, GET_UPDATED_ORDERS } from "../utils/queries";
 
 const Orders: React.FC = () => {
-  const { data: { orders } = {}, loading } = useQuery(GET_ORDERS);
-  // const { data: { ordersUpdated: orders } = {}, loading } =
-  //   useSubscription(GET_UPDATED_ORDERS);
+  // const { data: { orders } = {}, loading } = useQuery(GET_ORDERS);
+  const { data: { ordersUpdated: orders } = {}, loading } =
+    useSubscription(GET_UPDATED_ORDERS);
 
   if (loading) return <p>Loading...</p>;
 

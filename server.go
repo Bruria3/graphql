@@ -1,6 +1,9 @@
 package main
 
 import (
+	eventhub "github.com/leandro-lugaresi/hub"
+
+	"go-react-graphql-orders/config"
 	"go-react-graphql-orders/middleware"
 	"go-react-graphql-orders/resolver"
 	"go-react-graphql-orders/schema"
@@ -16,6 +19,7 @@ import (
 )
 
 const defaultPort = "8080"
+const KeyAppInit = "application.initialized"
 
 func main() {
 	port := os.Getenv("PORT")
@@ -31,10 +35,12 @@ func main() {
 	})
 
 	ctx := context.Background()
+	hub := config.InitEventHub()
 	orderService := service.NewOrderService()
 	ctx = context.WithValue(ctx, service.KeyOrderService, orderService)
 	graphqlSchema := graphql.MustParseSchema(schema.GetRootSchema(), &resolver.Resolver{})
 	http.Handle("/api/query", corsHandler.Handler(middleware.AddContext(ctx, &middleware.GraphQL{Schema: graphqlSchema})))
+	hub.Publish(eventhub.Message{Name: KeyAppInit})
 
 	log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))

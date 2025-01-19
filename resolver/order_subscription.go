@@ -5,7 +5,46 @@ import (
 	"fmt"
 	"go-react-graphql-orders/service"
 	"log"
+
+	"github.com/leandro-lugaresi/hub"
 )
+
+func (r *Resolver) OrdersUpdated(ctx context.Context) (chan *[]*orderResolver, error) {
+	c := make(chan *[]*orderResolver)
+	orderService := ctx.Value(service.KeyOrderService).(*service.OrderService)
+
+	go func() {
+		sub := orderService.Hub.NonBlockingSubscribe(10, "application.ordersUpdated")
+		orderService.Hub.Publish(hub.Message{Name: "application.ordersUpdated"})
+
+		defer func() {
+			orderService.Hub.Unsubscribe(sub)
+			close(c)
+		}()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-sub.Receiver:
+				orders, err := orderService.GetAll()
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+
+				resolvers := make([]*orderResolver, len(orders))
+				for i, order := range orders {
+					resolvers[i] = &orderResolver{o: order}
+				}
+
+				c <- &resolvers
+			}
+		}
+	}()
+
+	return c, nil
+}
 
 func (r *Resolver) OrderCreated(ctx context.Context) (chan *orderResolver, error) {
 	c := make(chan *orderResolver)
@@ -17,21 +56,6 @@ func (r *Resolver) OrderChanged(ctx context.Context, args struct{ Id string }) (
 	c := make(chan *orderResolver)
 	go subscribeOrder(fmt.Sprintf(service.KeyTplOrderChanged, args.Id), ctx, c)
 	return c, nil
-}
-
-func (r *Resolver) OrdersUpdated(ctx context.Context) (*[]*orderResolver, error) {
-	orders, err := ctx.Value(service.KeyOrderService).(*service.OrderService).GetAll()
-
-	if err != nil {
-		return nil, err
-	}
-
-	l := make([]*orderResolver, len(orders))
-	for i := range l {
-		l[i] = &orderResolver{o: orders[i]}
-	}
-
-	return &l, nil
 }
 
 func subscribeOrder(key string, ctx context.Context, c chan *orderResolver) {
