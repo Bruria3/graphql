@@ -34,12 +34,23 @@ func main() {
 		AllowCredentials: true,
 	})
 
+	// New server instance
+	server := middleware.NewSSEServer()
+	go server.Run()
+
+	// New Context
 	ctx := context.Background()
 	hub := config.InitEventHub()
 	orderService := service.NewOrderService()
 	ctx = context.WithValue(ctx, service.KeyOrderService, orderService)
+	ctx = context.WithValue(ctx, "sseServer", server)
 	graphqlSchema := graphql.MustParseSchema(schema.GetRootSchema(), &resolver.Resolver{})
-	http.Handle("/api/query", corsHandler.Handler(middleware.AddContext(ctx, &middleware.GraphQL{Schema: graphqlSchema})))
+
+	graphqlHandler := &middleware.GraphQL{
+		Schema: graphqlSchema,
+		Server: server,
+	}
+	http.Handle("/api/query", corsHandler.Handler(middleware.AddContext(ctx, graphqlHandler)))
 	hub.Publish(eventhub.Message{Name: KeyAppInit})
 
 	log.Printf("connect to http://localhost:%s/ for GraphQL playground", port)

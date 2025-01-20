@@ -15,7 +15,5 @@ type Mutation {
 }
 
 type Subscription {
-    orderCreated(): Order
-    orderChanged(id: ID!): Order
     ordersUpdated(): [Order]
 }

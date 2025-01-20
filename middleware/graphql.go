@@ -14,6 +14,7 @@ import (
 
 type GraphQL struct {
 	Schema *graphql.Schema
+	Server *SSEServer
 }
 
 const subscriptionTimeout = 30 * time.Minute
@@ -67,13 +68,16 @@ func (h *GraphQL) serveDefault(w http.ResponseWriter, r *http.Request, params *p
 }
 
 func (h *GraphQL) serveSubscription(w http.ResponseWriter, r *http.Request, params *params) {
-	ctx, cancel := context.WithTimeout(r.Context(), subscriptionTimeout)
-	callOnClose(w, cancel)
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		log.Printf("error: not a flusher\n")
+	clientID := len(h.Server.Clients) + 1
+	client := &SSEClient{
+		ID:     clientID,
+		Stream: make(chan string),
 	}
+	h.Server.AddClient <- client
+
+	ctx, cancel := context.WithTimeout(r.Context(), subscriptionTimeout)
+	h.callOnClose(w, cancel, client)
 
 	c, err := h.Schema.Subscribe(ctx, params.Query, params.OperationName, params.Variables)
 	if err != nil {
@@ -84,6 +88,17 @@ func (h *GraphQL) serveSubscription(w http.ResponseWriter, r *http.Request, para
 	w.Header().Set("content-type", "text/event-stream")
 	w.Header().Set("cache-control", "no-cache")
 
+	go func() {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			log.Printf("error: not a flusher\n")
+		}
+		for message := range client.Stream {
+			fmt.Fprintf(w, "data: %s\n\n", message)
+			flusher.Flush()
+		}
+	}()
+
 	var eventCount int
 	for r := range c {
 		response := r.(*graphql.Response)
@@ -92,15 +107,11 @@ func (h *GraphQL) serveSubscription(w http.ResponseWriter, r *http.Request, para
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
 		if hasError, statusCode := checkError(response); hasError {
 			w.WriteHeader(statusCode)
 		}
-
+		client.Stream <- string(responseJSON)
 		eventCount++
-		// TODO: make json decoder write to stream, don't buffer here
-		fmt.Fprintf(w, "data: %s\n\n", responseJSON)
-		flusher.Flush()
 	}
 
 	if eventCount == 0 {
@@ -125,15 +136,15 @@ func checkError(response *graphql.Response) (hasError bool, statusCode int) {
 	return hasError, statusCode
 }
 
-func callOnClose(w http.ResponseWriter, cb func()) {
+func (h *GraphQL) callOnClose(w http.ResponseWriter, cb func(), client *SSEClient) {
 	if cn, ok := w.(http.CloseNotifier); !ok {
 		log.Printf("error: not a close notifier\n")
 	} else {
-		// https://github.com/grpc-ecosystem/grpc-gateway/pull/120
 		closeChan := cn.CloseNotify()
 		go func(closeChan <-chan bool, cn http.CloseNotifier, cb func()) {
 			<-closeChan
 			cb()
+			h.Server.RemoveClient <- client.ID
 		}(closeChan, cn, cb)
 	}
 }

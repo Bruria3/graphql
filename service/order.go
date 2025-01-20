@@ -18,8 +18,7 @@ var lastId int
 
 const (
 	KeyOrderService    = "orderService"
-	KeyOrderCreated    = "order.create"
-	KeyTplOrderChanged = "order.update.%s"
+	KeyTplOrderChanged = "order.update"
 )
 
 func NewOrderService() *OrderService {
@@ -60,7 +59,7 @@ func (s *OrderService) Get(id string) (*model.Order, error) {
 
 func (s *OrderService) Create(order *model.Order) (*model.Order, error) {
 	logAPIUsage("Create", map[string]interface{}{"orderID": order.ID})
-	s.Hub.Publish(hub.Message{Name: "application.ordersUpdated"})
+	s.Hub.Publish(hub.Message{Name: KeyTplOrderChanged})
 	return order, nil
 }
 
@@ -71,6 +70,6 @@ func (s *OrderService) Update(order *model.Order) (*model.Order, error) {
 		log.Printf("Error in Update: %v", err)
 		return nil, err
 	}
-	s.Hub.Publish(hub.Message{Name: "application.ordersUpdated"})
+	s.Hub.Publish(hub.Message{Name: KeyTplOrderChanged})
 	return order, nil
 }
